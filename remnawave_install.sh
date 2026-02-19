@@ -4,6 +4,7 @@
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
+ORANGE='\033[0;33m'
 NC='\033[0m' # No Color
 
 # Функция для вывода с цветом
@@ -16,23 +17,30 @@ print_error() {
 }
 
 print_info() {
-    echo -e "${YELLOW}ℹ $1${NC}"
+    echo -e "${ORANGE}ℹ $1${NC}"
 }
 
-# Функция для запроса ввода
+print_warning() {
+    echo -e "${YELLOW}⚠ $1${NC}"
+}
+
+# Функция для запроса ввода (читаем из /dev/tty для работы с curl | bash)
 ask_input() {
     local prompt="$1"
     local var_name="$2"
     local default="$3"
 
     if [ -n "$default" ]; then
-        read -p "$(echo -e ${YELLOW}${prompt}${NC}) [${default}]: " input
+        echo -ne "${ORANGE}${prompt}${NC} [${default}]: " > /dev/tty
+        read -r input < /dev/tty
         input=${input:-$default}
     else
-        read -p "$(echo -e ${YELLOW}${prompt}${NC}): " input
+        echo -ne "${ORANGE}${prompt}${NC}: " > /dev/tty
+        read -r input < /dev/tty
         while [ -z "$input" ]; do
             print_error "Это поле обязательно!"
-            read -p "$(echo -e ${YELLOW}${prompt}${NC}): " input
+            echo -ne "${ORANGE}${prompt}${NC}: " > /dev/tty
+            read -r input < /dev/tty
         done
     fi
 
@@ -42,7 +50,8 @@ ask_input() {
 # Функция для подтверждения
 ask_confirm() {
     local prompt="$1"
-    read -p "$(echo -e ${YELLOW}${prompt}${NC}) (y/n): " confirm
+    echo -ne "${ORANGE}${prompt}${NC} (y/n): " > /dev/tty
+    read -r confirm < /dev/tty
     [[ "$confirm" =~ ^[Yy]$ ]]
 }
 
@@ -57,7 +66,8 @@ echo "Выберите компонент для установки:"
 echo "1) Remnawave Node (Step 7)"
 echo "2) Selfsteal SNI (Step 8)"
 echo "3) Оба компонента"
-read -p "Ваш выбор (1-3): " install_choice
+echo -ne "${ORANGE}Ваш выбор (1-3):${NC} " > /dev/tty
+read -r install_choice < /dev/tty
 
 install_node=false
 install_selfsteal=false
@@ -80,7 +90,7 @@ if [ "$install_node" = true ]; then
 
     # Обновление системы
     print_info "Обновление системы и установка curl..."
-    if ! apt update && apt install -y curl; then
+    if ! apt update > /dev/null 2>&1 && apt install -y curl > /dev/null 2>&1; then
         print_error "Ошибка при обновлении системы"
         exit 1
     fi
@@ -89,7 +99,7 @@ if [ "$install_node" = true ]; then
 
     # Установка Docker
     print_info "Установка Docker..."
-    if ! curl -fsSL https://get.docker.com | sh; then
+    if ! curl -fsSL https://get.docker.com | sh > /dev/null 2>&1; then
         print_error "Ошибка при установке Docker"
         exit 1
     fi
@@ -110,7 +120,7 @@ if [ "$install_node" = true ]; then
     COMPOSE_CONTENT=""
     while IFS= read -r line; do
         COMPOSE_CONTENT+="$line"$'\n'
-    done
+    done < /dev/tty
 
     # Сохранение docker-compose.yml
     echo -e "$COMPOSE_CONTENT" > docker-compose.yml
@@ -221,8 +231,10 @@ EOF
     # Запуск и проверка
     if ask_confirm "Запустить Selfsteal контейнер?"; then
         print_info "Запуск контейнера..."
-        docker compose up -d && docker compose logs -f -t &
+        docker compose up -d
         sleep 2
+        print_info "Логи контейнера (Ctrl+C для выхода):"
+        docker compose logs -f -t
     fi
     echo ""
 
